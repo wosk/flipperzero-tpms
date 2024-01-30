@@ -181,7 +181,7 @@ void tpms_protocol_decoder_ford_feed(void *context, bool level, uint32_t duratio
     furi_assert(context);
     TPMSProtocolDecoderFord *instance = context;
     bool bit = false;
-    bool have_bit = false;
+    // bool have_bit = false;
 
     switch (instance->decoder.parser_step)
     {
