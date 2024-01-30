@@ -7,6 +7,7 @@
 
 ####  Supported sensors
 * Schrader GG4
+* Ford TPMS
 * Abarth 124 (soon)
 
 ## How to use
