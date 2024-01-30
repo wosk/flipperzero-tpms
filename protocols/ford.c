@@ -56,7 +56,7 @@
 
 static const SubGhzBlockConst tpms_protocol_ford_const = {
     .te_short = 52,
-    .te_long = 52,
+    .te_long = 104,
     .te_delta = 150,
     .min_count_bit_for_found = 64,
 };
