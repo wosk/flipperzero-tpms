@@ -210,8 +210,37 @@ void tpms_protocol_decoder_ford_feed(void *context, bool level, uint32_t duratio
     bool bit = false;
     bool have_bit = false;
 
-    // Convert level and duration to Manchester event
-    ManchesterEvent event = level_and_duration_to_event(level, duration);
+    // low-level bit sequence decoding
+    if (instance->decoder.parser_step != FordDecoderStepReset)
+    {
+        ManchesterEvent event = level_and_duration_to_event(level, duration);
+
+        if (event == ManchesterEventReset)
+        {
+            if ((instance->decoder.parser_step == FordDecoderStepDecoderData) &&
+                instance->decoder.decode_count_bit)
+            {
+                // FURI_LOG_D(TAG, "%d-%ld", level, duration);
+                FURI_LOG_D(
+                    TAG,
+                    "reset accumulated %d bits: %llx",
+                    instance->decoder.decode_count_bit,
+                    instance->decoder.decode_data);
+            }
+
+            instance->decoder.parser_step = FordDecoderStepReset;
+        }
+        else
+        {
+            have_bit = manchester_advance(
+                instance->manchester_saved_state, event, &instance->manchester_saved_state, &bit);
+            if (!have_bit)
+                return;
+
+            // Invert value, due to signal is Manchester II and decoder is Manchester I
+            bit = !bit;
+        }
+    }
 
     switch (instance->decoder.parser_step)
     {
@@ -222,7 +251,7 @@ void tpms_protocol_decoder_ford_feed(void *context, bool level, uint32_t duratio
             instance->decoder.parser_step = FordDecoderStepCheckPreamble;
             instance->decoder.decode_data = 0;
             instance->decoder.decode_count_bit = 0;
-            instance->manchester_saved_state = 0; // Initialize Manchester state
+            instance->manchester_saved_state = ManchesterStateStart1; // Initialize Manchester state
         }
         break;
 
@@ -241,14 +270,6 @@ void tpms_protocol_decoder_ford_feed(void *context, bool level, uint32_t duratio
         break;
 
     case FordDecoderStepDecoderData:
-        have_bit = manchester_advance(
-            instance->manchester_saved_state, event, &instance->manchester_saved_state, &bit);
-        if (!have_bit)
-            return;
-
-        // Invert value, due to signal is Manchester II and decoder is Manchester I
-        bit = !bit;
-
         subghz_protocol_blocks_add_bit(&instance->decoder, bit);
         if (instance->decoder.decode_count_bit ==
             tpms_protocol_ford_const.min_count_bit_for_found)
