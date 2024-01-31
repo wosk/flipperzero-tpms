@@ -253,6 +253,7 @@ void tpms_protocol_decoder_ford_feed(void *context, bool level, uint32_t duratio
         if (instance->decoder.decode_count_bit ==
             tpms_protocol_ford_const.min_count_bit_for_found)
         {
+            FURI_LOG_D(TAG, "%016llx", instance->decoder.decode_data);
             if (!tpms_protocol_ford_check_crc(instance))
             {
                 FURI_LOG_D(TAG, "CRC mismatch drop");
