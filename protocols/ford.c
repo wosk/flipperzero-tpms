@@ -1,4 +1,5 @@
 #include "ford.h"
+#include <lib/toolbox/manchester_decoder.h>
 
 #define TAG "Ford"
 
@@ -48,10 +49,8 @@
  * - C = Checksum, SUM bytes 0 to 6 = byte 7
  */
 
-#define PREAMBLE   \
-    {              \
-        0xaa, 0xa9 \
-    }
+#define PREAMBLE_PATTERN \
+    { 0xaa, 0xa9 }
 #define PREAMBLE_BITS_LEN 16
 
 static const SubGhzBlockConst tpms_protocol_ford_const = {
@@ -61,26 +60,24 @@ static const SubGhzBlockConst tpms_protocol_ford_const = {
     .min_count_bit_for_found = 64,
 };
 
-struct TPMSProtocolDecoderFord
-{
+struct TPMSProtocolDecoderFord {
     SubGhzProtocolDecoderBase base;
 
     SubGhzBlockDecoder decoder;
     TPMSBlockGeneric generic;
 
+    ManchesterState manchester_saved_state;
     uint16_t header_count;
 };
 
-struct TPMSProtocolEncoderFord
-{
+struct TPMSProtocolEncoderFord {
     SubGhzProtocolEncoderBase base;
 
     SubGhzProtocolBlockEncoder encoder;
     TPMSBlockGeneric generic;
 };
 
-typedef enum
-{
+typedef enum {
     FordDecoderStepReset = 0,
     FordDecoderStepCheckPreamble,
     FordDecoderStepDecoderData,
@@ -120,110 +117,124 @@ const SubGhzProtocol tpms_protocol_ford = {
     .encoder = &tpms_protocol_ford_encoder,
 };
 
-void *tpms_protocol_decoder_ford_alloc(SubGhzEnvironment *environment)
-{
+void* tpms_protocol_decoder_ford_alloc(SubGhzEnvironment* environment) {
     UNUSED(environment);
-    TPMSProtocolDecoderFord *instance = malloc(sizeof(TPMSProtocolDecoderFord));
+    TPMSProtocolDecoderFord* instance = malloc(sizeof(TPMSProtocolDecoderFord));
     instance->base.protocol = &tpms_protocol_ford;
     instance->generic.protocol_name = instance->base.protocol->name;
     return instance;
 }
 
-void tpms_protocol_decoder_ford_free(void *context)
-{
+void tpms_protocol_decoder_ford_free(void* context) {
     furi_assert(context);
-    TPMSProtocolDecoderFord *instance = context;
+    TPMSProtocolDecoderFord* instance = context;
     free(instance);
 }
 
-void tpms_protocol_decoder_ford_reset(void *context)
-{
+void tpms_protocol_decoder_ford_reset(void* context) {
     furi_assert(context);
-    TPMSProtocolDecoderFord *instance = context;
+    TPMSProtocolDecoderFord* instance = context;
     instance->decoder.parser_step = FordDecoderStepReset;
 }
 
-static bool tpms_protocol_ford_check_crc(TPMSProtocolDecoderFord *instance)
-{
-    if (!instance->decoder.decode_data)
-        return false;
-    uint8_t msg[] = {
-        instance->decoder.decode_data >> 56,
-        instance->decoder.decode_data >> 48,
-        instance->decoder.decode_data >> 40,
-        instance->decoder.decode_data >> 32,
-        instance->decoder.decode_data >> 24,
-        instance->decoder.decode_data >> 16,
-        instance->decoder.decode_data >> 8};
+static bool tpms_protocol_ford_check_crc(TPMSProtocolDecoderFord* instance) {
+    if(!instance->decoder.decode_data) return false;
 
-    uint8_t crc = subghz_protocol_blocks_crc8(msg, 7, 0x7, 0);
-    return (crc == (instance->decoder.decode_data & 0xFF));
+    uint8_t* b = (uint8_t*)&instance->decoder.decode_data;
+    FURI_LOG_D(TAG, "checksum in data from decoder: %02x", b[7]);
+
+    uint8_t checksum = (b[0] + b[1] + b[2] + b[3] + b[4] + b[5] + b[6]) & 0xFF;
+    FURI_LOG_D(TAG, "calculated checksum: %02x", checksum);
+
+    return (checksum == b[7]);
 }
 
 /**
  * Analysis of received data
  * @param instance Pointer to a TPMSBlockGeneric* instance
  */
-static void tpms_protocol_ford_analyze(TPMSBlockGeneric *instance)
-{
+static void tpms_protocol_ford_analyze(TPMSBlockGeneric* instance) {
     // TODO
     instance->id = instance->data >> 32;
 
     instance->battery_low = TPMS_NO_BATT;
 
-    instance->temperature = ((instance->data >> 16) & 0xFF) - 56;
+    instance->temperature = ((instance->data >> 24) & 0xFF) - 56;
     instance->pressure = ((instance->data >> 8) & 0xFF) * 0.25f * 0.069;
 }
 
-void tpms_protocol_decoder_ford_feed(void *context, bool level, uint32_t duration)
-{
+static ManchesterEvent level_and_duration_to_event(bool level, uint32_t duration) {
+    bool is_long = false;
+
+    if(DURATION_DIFF(duration, tpms_protocol_ford_const.te_long) <
+       tpms_protocol_ford_const.te_delta) {
+        is_long = true;
+    } else if(
+        DURATION_DIFF(duration, tpms_protocol_ford_const.te_short) <
+        tpms_protocol_ford_const.te_delta) {
+        is_long = false;
+    } else {
+        return ManchesterEventReset;
+    }
+
+    if(level)
+        return is_long ? ManchesterEventLongHigh : ManchesterEventShortHigh;
+    else
+        return is_long ? ManchesterEventLongLow : ManchesterEventShortLow;
+}
+
+// ...
+
+void tpms_protocol_decoder_ford_feed(void* context, bool level, uint32_t duration) {
     // TODO
     furi_assert(context);
-    TPMSProtocolDecoderFord *instance = context;
+    TPMSProtocolDecoderFord* instance = context;
     bool bit = false;
-    // bool have_bit = false;
 
-    switch (instance->decoder.parser_step)
-    {
+    // Convert level and duration to Manchester event
+    ManchesterEvent event = level_and_duration_to_event(level, duration);
+
+    switch(instance->decoder.parser_step) {
     case FordDecoderStepReset:
-        if ((!level) && (DURATION_DIFF(duration, tpms_protocol_ford_const.te_long * 2) <
-                         tpms_protocol_ford_const.te_delta))
-        {
+        if((!level) && (DURATION_DIFF(duration, tpms_protocol_ford_const.te_long * 2) <
+                        tpms_protocol_ford_const.te_delta)) {
             instance->decoder.parser_step = FordDecoderStepCheckPreamble;
             instance->decoder.decode_data = 0;
             instance->decoder.decode_count_bit = 0;
+            instance->manchester_saved_state = 0; // Initialize Manchester state
         }
         break;
+
     case FordDecoderStepCheckPreamble:
-        if (bit != 0)
-        {
+        if(bit != 0) {
             instance->decoder.parser_step = FordDecoderStepReset;
             break;
         }
 
         instance->header_count++;
-        if (instance->header_count == PREAMBLE_BITS_LEN)
-        {
+        if(instance->header_count == PREAMBLE_BITS_LEN) {
             instance->decoder.parser_step = FordDecoderStepDecoderData;
         }
         break;
+
     case FordDecoderStepDecoderData:
+        bool have_bit = manchester_advance(
+            instance->manchester_saved_state, event, &instance->manchester_saved_state, &bit);
+        if(!have_bit) return;
+
+        // Invert value, due to signal is Manchester II and decoder is Manchester I
+        bit = !bit;
+
         subghz_protocol_blocks_add_bit(&instance->decoder, bit);
-        if (instance->decoder.decode_count_bit ==
-            tpms_protocol_ford_const.min_count_bit_for_found)
-        {
-            FURI_LOG_D(TAG, "%06llx", instance->decoder.decode_data);
-            if (!tpms_protocol_ford_check_crc(instance))
-            {
+        if(instance->decoder.decode_count_bit ==
+           tpms_protocol_ford_const.min_count_bit_for_found) {
+            if(!tpms_protocol_ford_check_crc(instance)) {
                 FURI_LOG_D(TAG, "CRC mismatch drop");
-            }
-            else
-            {
+            } else {
                 instance->generic.data = instance->decoder.decode_data;
                 instance->generic.data_count_bit = instance->decoder.decode_count_bit;
                 tpms_protocol_ford_analyze(&instance->generic);
-                if (instance->base.callback)
-                {
+                if(instance->base.callback) {
                     instance->base.callback(&instance->base, instance->base.context);
                 }
             }
@@ -233,33 +244,34 @@ void tpms_protocol_decoder_ford_feed(void *context, bool level, uint32_t duratio
     }
 }
 
-uint8_t tpms_protocol_decoder_ford_get_hash_data(void *context)
-{
+uint8_t tpms_protocol_decoder_ford_get_hash_data(void* context) {
     furi_assert(context);
-    TPMSProtocolDecoderFord *instance = context;
+    TPMSProtocolDecoderFord* instance = context;
     return subghz_protocol_blocks_get_hash_data(
         &instance->decoder, (instance->decoder.decode_count_bit / 8) + 1);
 }
 
-SubGhzProtocolStatus tpms_protocol_decoder_ford_serialize(void *context, FlipperFormat *flipper_format, SubGhzRadioPreset *preset)
-{
+SubGhzProtocolStatus tpms_protocol_decoder_ford_serialize(
+    void* context,
+    FlipperFormat* flipper_format,
+    SubGhzRadioPreset* preset) {
     furi_assert(context);
-    TPMSProtocolDecoderFord *instance = context;
+    TPMSProtocolDecoderFord* instance = context;
     return tpms_block_generic_serialize(&instance->generic, flipper_format, preset);
 }
 
-SubGhzProtocolStatus tpms_protocol_decoder_ford_deserialize(void *context, FlipperFormat *flipper_format)
-{
+SubGhzProtocolStatus
+    tpms_protocol_decoder_ford_deserialize(void* context, FlipperFormat* flipper_format) {
     furi_assert(context);
-    TPMSProtocolDecoderFord *instance = context;
-    return tpms_block_generic_deserialize_check_count_bit(&instance->generic, flipper_format, tpms_protocol_ford_const.min_count_bit_for_found);
+    TPMSProtocolDecoderFord* instance = context;
+    return tpms_block_generic_deserialize_check_count_bit(
+        &instance->generic, flipper_format, tpms_protocol_ford_const.min_count_bit_for_found);
 }
 
-void tpms_protocol_decoder_ford_get_string(void *context, FuriString *output)
-{
+void tpms_protocol_decoder_ford_get_string(void* context, FuriString* output) {
     // TODO
     furi_assert(context);
-    TPMSProtocolDecoderFord *instance = context;
+    TPMSProtocolDecoderFord* instance = context;
     furi_string_printf(
         output,
         "%s\r\n"
