@@ -6,6 +6,7 @@
 - Relearn by 125kHz signal
 
 ####  Supported sensors
+* SMD3MA4
 * Schrader GG4
 * Abarth 124 (soon)
 
