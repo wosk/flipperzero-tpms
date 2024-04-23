@@ -174,7 +174,7 @@ static void tpms_protocol_SMD3MA4_analyze(TPMSBlockGeneric* instance) {
     // TODO locate and fix
     instance->battery_low = TPMS_NO_BATT;
 
-    instance->temperature = ((instance->data >> 8) & 0xFF) - 50;
+    instance->temperature = ((instance->data >> 6) & 0xFF);
     instance->pressure = (((instance->data >> 5) & 0xFF) - 32) * 2;
 }
 
