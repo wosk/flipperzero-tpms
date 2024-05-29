@@ -11,8 +11,7 @@
 #define TPMS_KEY_FILE_TYPE "Flipper Tire Pressure Monitoring System Key File"
 
 /** TPMSRxKeyState state */
-typedef enum
-{
+typedef enum {
     TPMSRxKeyStateIDLE,
     TPMSRxKeyStateBack,
     TPMSRxKeyStateStart,
@@ -20,22 +19,19 @@ typedef enum
 } TPMSRxKeyState;
 
 /** TPMSHopperState state */
-typedef enum
-{
+typedef enum {
     TPMSHopperStateOFF,
     TPMSHopperStateRunnig,
     TPMSHopperStatePause,
     TPMSHopperStateRSSITimeOut,
 } TPMSHopperState;
 
-typedef enum
-{
+typedef enum {
     TPMSLockOff,
     TPMSLockOn,
 } TPMSLock;
 
-typedef enum
-{
+typedef enum {
     TPMSViewVariableItemList,
     TPMSViewSubmenu,
     TPMSViewReceiver,
@@ -44,22 +40,19 @@ typedef enum
 } TPMSView;
 
 /** TPMSTxRx state */
-typedef enum
-{
+typedef enum {
     TPMSTxRxStateIDLE,
     TPMSTxRxStateRx,
     TPMSTxRxStateTx,
     TPMSTxRxStateSleep,
 } TPMSTxRxState;
 
-typedef enum
-{
+typedef enum {
     TPMSRelearnOff,
     TPMSRelearnOn,
 } TPMSRelearn;
 
-typedef enum
-{
+typedef enum {
     TPMSRelearnTypeCommon,
     TPMSRelearnTypeFord,
     // TPMSRelearnAnotherOEM,

@@ -22,19 +22,19 @@ extern const SubGhzProtocol tpms_protocol_ford;
  * @param environment Pointer to a SubGhzEnvironment instance
  * @return TPMSProtocolDecoderFord* pointer to a TPMSProtocolDecoderFord instance
  */
-void *tpms_protocol_decoder_ford_alloc(SubGhzEnvironment *environment);
+void* tpms_protocol_decoder_ford_alloc(SubGhzEnvironment* environment);
 
 /**
  * Free TPMSProtocolDecoderFord.
  * @param context Pointer to a TPMSProtocolDecoderFord instance
  */
-void tpms_protocol_decoder_ford_free(void *context);
+void tpms_protocol_decoder_ford_free(void* context);
 
 /**
  * Reset decoder TPMSProtocolDecoderFord.
  * @param context Pointer to a TPMSProtocolDecoderFord instance
  */
-void tpms_protocol_decoder_ford_reset(void *context);
+void tpms_protocol_decoder_ford_reset(void* context);
 
 /**
  * Parse a raw sequence of levels and durations received from the air.
@@ -42,14 +42,14 @@ void tpms_protocol_decoder_ford_reset(void *context);
  * @param level Signal level true-high false-low
  * @param duration Duration of this level in, us
  */
-void tpms_protocol_decoder_ford_feed(void *context, bool level, uint32_t duration);
+void tpms_protocol_decoder_ford_feed(void* context, bool level, uint32_t duration);
 
 /**
  * Getting the hash sum of the last randomly received parcel.
  * @param context Pointer to a TPMSProtocolDecoderFord instance
  * @return hash Hash sum
  */
-uint8_t tpms_protocol_decoder_ford_get_hash_data(void *context);
+uint8_t tpms_protocol_decoder_ford_get_hash_data(void* context);
 
 /**
  * Serialize data TPMSProtocolDecoderFord.
@@ -59,9 +59,9 @@ uint8_t tpms_protocol_decoder_ford_get_hash_data(void *context);
  * @return status
  */
 SubGhzProtocolStatus tpms_protocol_decoder_ford_serialize(
-    void *context,
-    FlipperFormat *flipper_format,
-    SubGhzRadioPreset *preset);
+    void* context,
+    FlipperFormat* flipper_format,
+    SubGhzRadioPreset* preset);
 
 /**
  * Deserialize data TPMSProtocolDecoderFord.
@@ -70,11 +70,11 @@ SubGhzProtocolStatus tpms_protocol_decoder_ford_serialize(
  * @return status
  */
 SubGhzProtocolStatus
-tpms_protocol_decoder_ford_deserialize(void *context, FlipperFormat *flipper_format);
+    tpms_protocol_decoder_ford_deserialize(void* context, FlipperFormat* flipper_format);
 
 /**
  * Getting a textual representation of the received data.
  * @param context Pointer to a TPMSProtocolDecoderFord instance
  * @param output Resulting text
  */
-void tpms_protocol_decoder_ford_get_string(void *context, FuriString *output);
+void tpms_protocol_decoder_ford_get_string(void* context, FuriString* output);
