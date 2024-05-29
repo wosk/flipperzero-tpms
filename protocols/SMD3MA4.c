@@ -151,16 +151,8 @@ void tpms_protocol_decoder_SMD3MA4_reset(void* context) {
     instance->decoder.parser_step = SMD3MA4DecoderStepReset;
 }
 
-// static bool tpms_protocol_abarth124_check_crc(TPMSProtocolDecoderAbarth124* instance) {
-//     uint8_t msg[] = {
-//         instance->decoder.decode_data >> 48,
-//         instance->decoder.decode_data >> 40,
-//         instance->decoder.decode_data >> 32,
-//         instance->decoder.decode_data >> 24,
-//         instance->decoder.decode_data >> 16,
-//         instance->decoder.decode_data >> 8};
-
-//     uint8_t crc = subghz_protocol_blocks_crc8(msg, 7, 0x7, 0);
+// static bool tpms_protocol_SMD3MA4_check_crc(TPMSProtocolDecoderSMD3MA4* instance) {
+//     Check latest 2 parity bits
 //     return (crc == (instance->decoder.decode_data & 0xFF));
 // }
 
@@ -175,7 +167,7 @@ static void tpms_protocol_SMD3MA4_analyze(TPMSBlockGeneric* instance) {
     instance->battery_low = TPMS_NO_BATT;
 
     instance->temperature = ((instance->data >> 6) & 0xFF);
-    instance->pressure = (((instance->data >> 5) & 0xFF) - 32) * 2;
+    instance->pressure = (((instance->data >> 5) & 0xFF) - 32) * 0.2 * 0.069;
 }
 
 static ManchesterEvent level_and_duration_to_event(bool level, uint32_t duration) {
