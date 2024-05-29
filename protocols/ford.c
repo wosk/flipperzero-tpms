@@ -6,6 +6,7 @@
 /**
  * Help
  * https://github.com/merbanan/rtl_433/blob/master/src/devices/tpms_ford.c
+ * https://fccid.io/KR5S180020
  *
  * FSK 8 byte Manchester encoded TPMS with simple checksum.
  * Seen on Ford Fiesta, Focus, Kuga, Escape, Transit...
@@ -56,7 +57,7 @@
 static const SubGhzBlockConst tpms_protocol_ford_const = {
     .te_short = 52,
     .te_long = 104,
-    .te_delta = 150,
+    .te_delta = 25,
     .min_count_bit_for_found = 64,
 };
 
@@ -159,8 +160,8 @@ static void tpms_protocol_ford_analyze(TPMSBlockGeneric* instance) {
 
     instance->battery_low = TPMS_NO_BATT;
 
-    instance->temperature = ((instance->data >> 24) & 0xFF) - 56;
-    instance->pressure = ((instance->data >> 8) & 0xFF) * 0.25f * 0.069;
+    instance->temperature = ((instance->data >> 16) & 0xFF) - 56;
+    instance->pressure = ((instance->data >> 24) & 0xFF) * 0.25f * 0.069;
 }
 
 static ManchesterEvent level_and_duration_to_event(bool level, uint32_t duration) {
