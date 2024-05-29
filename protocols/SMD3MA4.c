@@ -66,7 +66,6 @@ Example payloads:
 */
 #define PREAMBLE_BITS_LEN 3
 
-
 static const SubGhzBlockConst tpms_protocol_SMD3MA4_const = {
     .te_short = 120,
     .te_long = 240,
@@ -253,13 +252,13 @@ void tpms_protocol_decoder_SMD3MA4_feed(void* context, bool level, uint32_t dura
         if(instance->decoder.decode_count_bit ==
            tpms_protocol_SMD3MA4_const.min_count_bit_for_found) {
             FURI_LOG_D(TAG, "%016llx", instance->decoder.decode_data);
-        
-                instance->generic.data = instance->decoder.decode_data;
-                instance->generic.data_count_bit = instance->decoder.decode_count_bit;
-                tpms_protocol_SMD3MA4_analyze(&instance->generic);
-                if(instance->base.callback)
-                    instance->base.callback(&instance->base, instance->base.context);
-            
+
+            instance->generic.data = instance->decoder.decode_data;
+            instance->generic.data_count_bit = instance->decoder.decode_count_bit;
+            tpms_protocol_SMD3MA4_analyze(&instance->generic);
+            if(instance->base.callback)
+                instance->base.callback(&instance->base, instance->base.context);
+
             instance->decoder.parser_step = SMD3MA4DecoderStepReset;
         }
         break;
@@ -287,9 +286,7 @@ SubGhzProtocolStatus
     furi_assert(context);
     TPMSProtocolDecoderSMD3MA4* instance = context;
     return tpms_block_generic_deserialize_check_count_bit(
-        &instance->generic,
-        flipper_format,
-        tpms_protocol_SMD3MA4_const.min_count_bit_for_found);
+        &instance->generic, flipper_format, tpms_protocol_SMD3MA4_const.min_count_bit_for_found);
 }
 
 void tpms_protocol_decoder_SMD3MA4_get_string(void* context, FuriString* output) {
