@@ -54,6 +54,6 @@ typedef enum {
 
 typedef enum {
     TPMSRelearnTypeCommon,
-    TPMSRelearnTypeFord,
+    // TPMSRelearnGM_FORD,
     // TPMSRelearnAnotherOEM,
 } TPMSRelearnType;

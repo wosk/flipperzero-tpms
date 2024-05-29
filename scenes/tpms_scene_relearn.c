@@ -15,7 +15,6 @@ const char* const relearn_setting_text[TPMSRelearnSettingNum] = {
 
 enum TPMSRelearnType {
     TPMSRelearnCommon, // Just signal without data
-    TPMSRelearnFord, // TODO - implement relearn pulses for Ford
     // TPMSRelearnGM_FORD,
     // TPMSRelearnAnotherOEM,
     TPMSRelearnTypeNum,
