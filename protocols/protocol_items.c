@@ -2,6 +2,7 @@
 
 const SubGhzProtocol* tpms_protocol_registry_items[] = {
     &tpms_protocol_schrader_gg4,
+    &tpms_protocol_toyota_pmvc2x,
 };
 
 const SubGhzProtocolRegistry tpms_protocol_registry = {

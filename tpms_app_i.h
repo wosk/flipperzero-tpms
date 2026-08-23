@@ -21,6 +21,7 @@
 #include <lib/subghz/registry.h>
 
 #include "helpers/radio_device_loader.h"
+#include "helpers/tpms_preset.h"
 
 typedef struct TPMSApp TPMSApp;
 
@@ -28,6 +29,7 @@ struct TPMSTxRx {
     SubGhzWorker* worker;
 
     const SubGhzDevice* radio_device;
+    SubGhzRadioDeviceType radio_device_type;
     SubGhzEnvironment* environment;
     SubGhzReceiver* receiver;
     SubGhzRadioPreset* preset;
@@ -35,6 +37,7 @@ struct TPMSTxRx {
     uint16_t idx_menu_chosen;
     TPMSTxRxState txrx_state;
     TPMSHopperState hopper_state;
+    int16_t rssi_filter_dbm;
     uint8_t hopper_timeout;
     uint8_t hopper_idx_frequency;
     TPMSRxKeyState rx_key_state;
@@ -68,6 +71,8 @@ void tpms_preset_init(
 bool tpms_set_preset(TPMSApp* app, const char* preset);
 void tpms_get_frequency_modulation(TPMSApp* app, FuriString* frequency, FuriString* modulation);
 void tpms_begin(TPMSApp* app, uint8_t* preset_data);
+void tpms_apply_radio_device(TPMSApp* app);
+void tpms_receiver_restart(TPMSApp* app);
 uint32_t tpms_rx(TPMSApp* app, uint32_t frequency);
 void tpms_idle(TPMSApp* app);
 void tpms_rx_end(TPMSApp* app);

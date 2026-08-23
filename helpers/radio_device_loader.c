@@ -16,6 +16,18 @@ static void radio_device_loader_power_off() {
     if(furi_hal_power_is_otg_enabled()) furi_hal_power_disable_otg();
 }
 
+static bool radio_device_loader_begin_external(const SubGhzDevice* radio_device) {
+    furi_assert(radio_device);
+
+    radio_device_loader_power_on();
+    if(subghz_devices_begin(radio_device)) {
+        return true;
+    }
+
+    radio_device_loader_power_off();
+    return false;
+}
+
 bool radio_device_loader_is_connect_external(const char* name) {
     bool is_connect = false;
     bool is_otg_enabled = furi_hal_power_is_otg_enabled();
@@ -38,21 +50,39 @@ bool radio_device_loader_is_connect_external(const char* name) {
 const SubGhzDevice* radio_device_loader_set(
     const SubGhzDevice* current_radio_device,
     SubGhzRadioDeviceType radio_device_type) {
-    const SubGhzDevice* radio_device;
+    const SubGhzDevice* internal_radio_device =
+        subghz_devices_get_by_name(SUBGHZ_DEVICE_CC1101_INT_NAME);
+    const SubGhzDevice* external_radio_device =
+        subghz_devices_get_by_name(SUBGHZ_DEVICE_CC1101_EXT_NAME);
 
-    if(radio_device_type == SubGhzRadioDeviceTypeExternalCC1101 &&
-       radio_device_loader_is_connect_external(SUBGHZ_DEVICE_CC1101_EXT_NAME)) {
-        radio_device_loader_power_on();
-        radio_device = subghz_devices_get_by_name(SUBGHZ_DEVICE_CC1101_EXT_NAME);
-        subghz_devices_begin(radio_device);
-    } else if(current_radio_device == NULL) {
-        radio_device = subghz_devices_get_by_name(SUBGHZ_DEVICE_CC1101_INT_NAME);
-    } else {
-        radio_device_loader_end(current_radio_device);
-        radio_device = subghz_devices_get_by_name(SUBGHZ_DEVICE_CC1101_INT_NAME);
+    bool prefer_external = (radio_device_type == SubGhzRadioDeviceTypeExternalCC1101);
+    if(prefer_external) {
+        prefer_external = radio_device_loader_is_connect_external(SUBGHZ_DEVICE_CC1101_EXT_NAME);
     }
 
-    return radio_device;
+    const SubGhzDevice* target_radio_device = internal_radio_device;
+    bool use_external = false;
+
+    if(prefer_external && external_radio_device) {
+        if(current_radio_device && current_radio_device != internal_radio_device) {
+            subghz_devices_end(current_radio_device);
+            current_radio_device = NULL;
+        }
+
+        use_external = radio_device_loader_begin_external(external_radio_device);
+        if(use_external) {
+            target_radio_device = external_radio_device;
+        }
+    }
+
+    if(!use_external) {
+        if(current_radio_device && current_radio_device != internal_radio_device) {
+            subghz_devices_end(current_radio_device);
+        }
+        radio_device_loader_power_off();
+    }
+
+    return target_radio_device;
 }
 
 bool radio_device_loader_is_external(const SubGhzDevice* radio_device) {

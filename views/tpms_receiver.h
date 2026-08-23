@@ -32,7 +32,8 @@ void tpms_view_receiver_add_data_statusbar(
 
 void tpms_view_receiver_add_item_to_menu(
     TPMSReceiver* tpms_receiver,
-    const char* name,
+    const char* type_label,
+    const char* id_label,
     uint8_t type);
 
 uint16_t tpms_view_receiver_get_idx_menu(TPMSReceiver* tpms_receiver);

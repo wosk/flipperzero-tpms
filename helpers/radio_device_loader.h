@@ -4,6 +4,7 @@
 
 /** SubGhzRadioDeviceType */
 typedef enum {
+    SubGhzRadioDeviceTypeAuto,
     SubGhzRadioDeviceTypeInternal,
     SubGhzRadioDeviceTypeExternalCC1101,
 } SubGhzRadioDeviceType;

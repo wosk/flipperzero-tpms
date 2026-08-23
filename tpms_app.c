@@ -85,9 +85,17 @@ TPMSApp* tpms_app_alloc() {
     app->txrx = malloc(sizeof(TPMSTxRx));
     app->txrx->preset = malloc(sizeof(SubGhzRadioPreset));
     app->txrx->preset->name = furi_string_alloc();
-    tpms_preset_init(app, "AM650", subghz_setting_get_default_frequency(app->setting), NULL, 0);
+    app->txrx->radio_device = NULL;
+    app->txrx->radio_device_type = SubGhzRadioDeviceTypeAuto;
+    tpms_preset_init(
+        app,
+        TPMS_PRESET_TOYOTA_PMVC2X_NAME,
+        tpms_preset_get_default_frequency(),
+        NULL,
+        0);
 
     app->txrx->hopper_state = TPMSHopperStateOFF;
+    app->txrx->rssi_filter_dbm = TPMS_RSSI_FILTER_OFF;
     app->txrx->history = tpms_history_alloc();
     app->txrx->worker = subghz_worker_alloc();
     app->txrx->environment = subghz_environment_alloc();
@@ -97,8 +105,7 @@ TPMSApp* tpms_app_alloc() {
 
     subghz_devices_init();
 
-    app->txrx->radio_device =
-        radio_device_loader_set(app->txrx->radio_device, SubGhzRadioDeviceTypeExternalCC1101);
+    tpms_apply_radio_device(app);
 
     subghz_devices_reset(app->txrx->radio_device);
     subghz_devices_idle(app->txrx->radio_device);

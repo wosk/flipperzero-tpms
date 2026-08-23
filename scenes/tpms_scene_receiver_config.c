@@ -4,6 +4,8 @@ enum TPMSSettingIndex {
     TPMSSettingIndexFrequency,
     TPMSSettingIndexHopping,
     TPMSSettingIndexModulation,
+    TPMSSettingIndexRadio,
+    TPMSSettingIndexMinRssi,
     TPMSSettingIndexLock,
 };
 
@@ -17,34 +19,102 @@ const uint32_t hopping_value[HOPPING_COUNT] = {
     TPMSHopperStateRunnig,
 };
 
+#define RADIO_COUNT 3
+const char* const radio_text[RADIO_COUNT] = {
+    "Auto",
+    "Internal",
+    "External",
+};
+const SubGhzRadioDeviceType radio_value[RADIO_COUNT] = {
+    SubGhzRadioDeviceTypeAuto,
+    SubGhzRadioDeviceTypeInternal,
+    SubGhzRadioDeviceTypeExternalCC1101,
+};
+
+#define RSSI_FILTER_COUNT 7
+const char* const rssi_filter_text[RSSI_FILTER_COUNT] = {
+    "Off",
+    "-100 dBm",
+    "-95 dBm",
+    "-90 dBm",
+    "-85 dBm",
+    "-80 dBm",
+    "-75 dBm",
+};
+const int16_t rssi_filter_value[RSSI_FILTER_COUNT] = {
+    TPMS_RSSI_FILTER_OFF,
+    -100,
+    -95,
+    -90,
+    -85,
+    -80,
+    -75,
+};
+
+static void tpms_scene_receiver_config_frequency_to_string(
+    char* text_buf,
+    size_t text_buf_size,
+    uint32_t frequency) {
+    snprintf(
+        text_buf,
+        text_buf_size,
+        "%03lu.%02lu",
+        (unsigned long)(frequency / 1000000U),
+        (unsigned long)((frequency % 1000000U) / 10000U));
+}
+
 uint8_t tpms_scene_receiver_config_next_frequency(const uint32_t value, void* context) {
     furi_assert(context);
     TPMSApp* app = context;
-    uint8_t index = 0;
+
     for(uint8_t i = 0; i < subghz_setting_get_frequency_count(app->setting); i++) {
         if(value == subghz_setting_get_frequency(app->setting, i)) {
-            index = i;
-            break;
-        } else {
-            index = subghz_setting_get_frequency_default_index(app->setting);
+            return i;
         }
     }
-    return index;
+
+    if(value != tpms_preset_get_default_frequency()) {
+        for(uint8_t i = 0; i < subghz_setting_get_frequency_count(app->setting); i++) {
+            if(tpms_preset_get_default_frequency() == subghz_setting_get_frequency(app->setting, i)) {
+                return i;
+            }
+        }
+    }
+
+    return subghz_setting_get_frequency_default_index(app->setting);
 }
 
 uint8_t tpms_scene_receiver_config_next_preset(const char* preset_name, void* context) {
     furi_assert(context);
-    TPMSApp* app = context;
-    uint8_t index = 0;
-    for(uint8_t i = 0; i < subghz_setting_get_preset_count(app->setting); i++) {
-        if(!strcmp(subghz_setting_get_preset_name(app->setting, i), preset_name)) {
-            index = i;
-            break;
-        } else {
-            //  index = subghz_setting_get_frequency_default_index(app ->setting);
+    UNUSED(context);
+    for(uint8_t i = 0; i < tpms_preset_count(); i++) {
+        const TPMSPresetDefinition* definition = tpms_preset_get_by_index(i);
+        if(definition && !strcmp(definition->name, preset_name)) {
+            return i;
         }
     }
-    return index;
+
+    return 0;
+}
+
+static uint8_t tpms_scene_receiver_config_radio_value_index(SubGhzRadioDeviceType value) {
+    for(uint8_t i = 0; i < RADIO_COUNT; i++) {
+        if(radio_value[i] == value) {
+            return i;
+        }
+    }
+
+    return 0;
+}
+
+static uint8_t tpms_scene_receiver_config_rssi_filter_value_index(int16_t value) {
+    for(uint8_t i = 0; i < RSSI_FILTER_COUNT; i++) {
+        if(rssi_filter_value[i] == value) {
+            return i;
+        }
+    }
+
+    return 0;
 }
 
 uint8_t tpms_scene_receiver_config_hopper_value_index(
@@ -73,12 +143,8 @@ static void tpms_scene_receiver_config_set_frequency(VariableItem* item) {
 
     if(app->txrx->hopper_state == TPMSHopperStateOFF) {
         char text_buf[10] = {0};
-        snprintf(
-            text_buf,
-            sizeof(text_buf),
-            "%lu.%02lu",
-            subghz_setting_get_frequency(app->setting, index) / 1000000,
-            (subghz_setting_get_frequency(app->setting, index) % 1000000) / 10000);
+        tpms_scene_receiver_config_frequency_to_string(
+            text_buf, sizeof(text_buf), subghz_setting_get_frequency(app->setting, index));
         variable_item_set_current_value_text(item, text_buf);
         app->txrx->preset->frequency = subghz_setting_get_frequency(app->setting, index);
     } else {
@@ -90,14 +156,27 @@ static void tpms_scene_receiver_config_set_frequency(VariableItem* item) {
 static void tpms_scene_receiver_config_set_preset(VariableItem* item) {
     TPMSApp* app = variable_item_get_context(item);
     uint8_t index = variable_item_get_current_value_index(item);
-    variable_item_set_current_value_text(
-        item, subghz_setting_get_preset_name(app->setting, index));
-    tpms_preset_init(
-        app,
-        subghz_setting_get_preset_name(app->setting, index),
-        app->txrx->preset->frequency,
-        subghz_setting_get_preset_data(app->setting, index),
-        subghz_setting_get_preset_data_size(app->setting, index));
+    const TPMSPresetDefinition* definition = tpms_preset_get_by_index(index);
+    furi_assert(definition);
+
+    variable_item_set_current_value_text(item, definition->name);
+    tpms_preset_init(app, definition->name, app->txrx->preset->frequency, NULL, 0);
+}
+
+static void tpms_scene_receiver_config_set_radio(VariableItem* item) {
+    TPMSApp* app = variable_item_get_context(item);
+    uint8_t index = variable_item_get_current_value_index(item);
+
+    variable_item_set_current_value_text(item, radio_text[index]);
+    app->txrx->radio_device_type = radio_value[index];
+}
+
+static void tpms_scene_receiver_config_set_rssi_filter(VariableItem* item) {
+    TPMSApp* app = variable_item_get_context(item);
+    uint8_t index = variable_item_get_current_value_index(item);
+
+    variable_item_set_current_value_text(item, rssi_filter_text[index]);
+    app->txrx->rssi_filter_dbm = rssi_filter_value[index];
 }
 
 static void tpms_scene_receiver_config_set_hopping_running(VariableItem* item) {
@@ -107,21 +186,17 @@ static void tpms_scene_receiver_config_set_hopping_running(VariableItem* item) {
     variable_item_set_current_value_text(item, hopping_text[index]);
     if(hopping_value[index] == TPMSHopperStateOFF) {
         char text_buf[10] = {0};
-        snprintf(
-            text_buf,
-            sizeof(text_buf),
-            "%lu.%02lu",
-            subghz_setting_get_default_frequency(app->setting) / 1000000,
-            (subghz_setting_get_default_frequency(app->setting) % 1000000) / 10000);
+        tpms_scene_receiver_config_frequency_to_string(
+            text_buf, sizeof(text_buf), tpms_preset_get_default_frequency());
         variable_item_set_current_value_text(
             (VariableItem*)scene_manager_get_scene_state(
                 app->scene_manager, TPMSSceneReceiverConfig),
             text_buf);
-        app->txrx->preset->frequency = subghz_setting_get_default_frequency(app->setting);
+        app->txrx->preset->frequency = tpms_preset_get_default_frequency();
         variable_item_set_current_value_index(
             (VariableItem*)scene_manager_get_scene_state(
                 app->scene_manager, TPMSSceneReceiverConfig),
-            subghz_setting_get_frequency_default_index(app->setting));
+            tpms_scene_receiver_config_next_frequency(tpms_preset_get_default_frequency(), app));
     } else {
         variable_item_set_current_value_text(
             (VariableItem*)scene_manager_get_scene_state(
@@ -159,12 +234,8 @@ void tpms_scene_receiver_config_on_enter(void* context) {
     scene_manager_set_scene_state(app->scene_manager, TPMSSceneReceiverConfig, (uint32_t)item);
     variable_item_set_current_value_index(item, value_index);
     char text_buf[10] = {0};
-    snprintf(
-        text_buf,
-        sizeof(text_buf),
-        "%lu.%02lu",
-        subghz_setting_get_frequency(app->setting, value_index) / 1000000,
-        (subghz_setting_get_frequency(app->setting, value_index) % 1000000) / 10000);
+    tpms_scene_receiver_config_frequency_to_string(
+        text_buf, sizeof(text_buf), subghz_setting_get_frequency(app->setting, value_index));
     variable_item_set_current_value_text(item, text_buf);
 
     item = variable_item_list_add(
@@ -181,14 +252,29 @@ void tpms_scene_receiver_config_on_enter(void* context) {
     item = variable_item_list_add(
         app->variable_item_list,
         "Modulation:",
-        subghz_setting_get_preset_count(app->setting),
+        tpms_preset_count(),
         tpms_scene_receiver_config_set_preset,
         app);
     value_index =
         tpms_scene_receiver_config_next_preset(furi_string_get_cstr(app->txrx->preset->name), app);
     variable_item_set_current_value_index(item, value_index);
-    variable_item_set_current_value_text(
-        item, subghz_setting_get_preset_name(app->setting, value_index));
+    variable_item_set_current_value_text(item, tpms_preset_get_by_index(value_index)->name);
+
+    item = variable_item_list_add(
+        app->variable_item_list, "Radio:", RADIO_COUNT, tpms_scene_receiver_config_set_radio, app);
+    value_index = tpms_scene_receiver_config_radio_value_index(app->txrx->radio_device_type);
+    variable_item_set_current_value_index(item, value_index);
+    variable_item_set_current_value_text(item, radio_text[value_index]);
+
+    item = variable_item_list_add(
+        app->variable_item_list,
+        "Min RSSI:",
+        RSSI_FILTER_COUNT,
+        tpms_scene_receiver_config_set_rssi_filter,
+        app);
+    value_index = tpms_scene_receiver_config_rssi_filter_value_index(app->txrx->rssi_filter_dbm);
+    variable_item_set_current_value_index(item, value_index);
+    variable_item_set_current_value_text(item, rssi_filter_text[value_index]);
 
     variable_item_list_add(app->variable_item_list, "Lock Keyboard", 1, NULL, NULL);
     variable_item_list_set_enter_callback(
