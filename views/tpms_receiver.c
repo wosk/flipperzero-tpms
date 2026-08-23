@@ -10,13 +10,14 @@
 #define TAG "TPMSReceiver"
 
 #define FRAME_HEIGHT 12
-#define MAX_LEN_PX 112
+#define TYPE_LEN_PX 60
 #define MENU_ITEMS 4u
 #define UNLOCK_CNT 3
 
 #define SUBGHZ_RAW_THRESHOLD_MIN -90.0f
 typedef struct {
-    FuriString* item_str;
+    FuriString* type_label;
+    FuriString* id_label;
     uint8_t type;
 } TPMSReceiverMenuItem;
 
@@ -137,7 +138,8 @@ static void tpms_view_receiver_update_offset(TPMSReceiver* tpms_receiver) {
 
 void tpms_view_receiver_add_item_to_menu(
     TPMSReceiver* tpms_receiver,
-    const char* name,
+    const char* type_label,
+    const char* id_label,
     uint8_t type) {
     furi_assert(tpms_receiver);
     with_view_model(
@@ -146,7 +148,8 @@ void tpms_view_receiver_add_item_to_menu(
         {
             TPMSReceiverMenuItem* item_menu =
                 TPMSReceiverMenuItemArray_push_raw(model->history->data);
-            item_menu->item_str = furi_string_alloc_set(name);
+            item_menu->type_label = furi_string_alloc_set(type_label);
+            item_menu->id_label = furi_string_alloc_set(id_label);
             item_menu->type = type;
             if((model->idx == model->history_item - 1)) {
                 model->history_item++;
@@ -210,29 +213,31 @@ void tpms_view_receiver_draw(Canvas* canvas, TPMSReceiverModel* model) {
     elements_button_left(canvas, "Config");
 
     bool scrollbar = model->history_item > 4;
-    FuriString* str_buff;
-    str_buff = furi_string_alloc();
-
     TPMSReceiverMenuItem* item_menu;
 
     for(size_t i = 0; i < MIN(model->history_item, MENU_ITEMS); ++i) {
         size_t idx = CLAMP((uint16_t)(i + model->list_offset), model->history_item, 0);
         item_menu = TPMSReceiverMenuItemArray_get(model->history->data, idx);
-        furi_string_set(str_buff, item_menu->item_str);
-        elements_string_fit_width(canvas, str_buff, scrollbar ? MAX_LEN_PX - 6 : MAX_LEN_PX);
         if(model->idx == idx) {
             tpms_view_receiver_draw_frame(canvas, i, scrollbar);
         } else {
             canvas_set_color(canvas, ColorBlack);
         }
-        // canvas_draw_icon(canvas, 4, 2 + i * FRAME_HEIGHT, ReceiverItemIcons[item_menu->type]);
-        canvas_draw_str(canvas, 4, 9 + i * FRAME_HEIGHT, furi_string_get_cstr(str_buff));
-        furi_string_reset(str_buff);
+
+        FuriString* type_str = furi_string_alloc_set(item_menu->type_label);
+        elements_string_fit_width(canvas, type_str, TYPE_LEN_PX);
+        canvas_draw_str(canvas, 4, 9 + i * FRAME_HEIGHT, furi_string_get_cstr(type_str));
+        furi_string_free(type_str);
+
+        const char* id_str = furi_string_get_cstr(item_menu->id_label);
+        uint16_t id_width = canvas_string_width(canvas, id_str);
+        uint16_t right_edge = scrollbar ? 118 : 123;
+        uint16_t id_x = (id_width < right_edge) ? (right_edge - id_width) : 64;
+        canvas_draw_str(canvas, id_x, 9 + i * FRAME_HEIGHT, id_str);
     }
     if(scrollbar) {
         elements_scrollbar_pos(canvas, 128, 0, 49, model->idx, model->history_item);
     }
-    furi_string_free(str_buff);
 
     canvas_set_color(canvas, ColorBlack);
 
@@ -409,7 +414,8 @@ void tpms_view_receiver_exit(void* context) {
             furi_string_reset(model->history_stat_str);
                 for
                     M_EACH(item_menu, model->history->data, TPMSReceiverMenuItemArray_t) {
-                        furi_string_free(item_menu->item_str);
+                        furi_string_free(item_menu->type_label);
+                        furi_string_free(item_menu->id_label);
                         item_menu->type = 0;
                     }
                 TPMSReceiverMenuItemArray_reset(model->history->data);
@@ -469,7 +475,8 @@ void tpms_view_receiver_free(TPMSReceiver* tpms_receiver) {
             furi_string_free(model->history_stat_str);
                 for
                     M_EACH(item_menu, model->history->data, TPMSReceiverMenuItemArray_t) {
-                        furi_string_free(item_menu->item_str);
+                        furi_string_free(item_menu->type_label);
+                        furi_string_free(item_menu->id_label);
                         item_menu->type = 0;
                     }
                 TPMSReceiverMenuItemArray_clear(model->history->data);

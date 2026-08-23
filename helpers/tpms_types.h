@@ -2,8 +2,9 @@
 
 #include <furi.h>
 #include <furi_hal.h>
+#include <limits.h>
 
-#define TPMS_VERSION_APP "0.1"
+#define TPMS_VERSION_APP "0.3"
 #define TPMS_DEVELOPED "wosk"
 #define TPMS_GITHUB "https://github.com/beewosk/flipperzero-tpms"
 
@@ -56,3 +57,5 @@ typedef enum {
     TPMSRelearnTypeCommon,
     //TPMSRelearnAnotherOEM,
 } TPMSRelearnType;
+
+#define TPMS_RSSI_FILTER_OFF INT16_MIN

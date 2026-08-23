@@ -3,10 +3,14 @@
 
 ## Features
 - Read [TPMS](https://en.wikipedia.org/wiki/Tire-pressure_monitoring_system) sensors
+- Decode Toyota PMV-C210/C215 sensors
+- Filter received frames by minimum RSSI
+- Select radio path explicitly: `Auto`, `Internal`, or `External`
 - Relearn by 125kHz signal
 
 ####  Supported sensors
 * Schrader GG4
+* Toyota PMV-C210 / PMV-C215
 * Abarth 124 (soon)
 
 ## How to use
@@ -18,6 +22,11 @@ When sensor transmit message, you will see jumps of RSSI meter.
 If sensor is supported and correct frequency and modulation was set, an item with Model and ID will be added for each sensor.
 
 Pressing OK displays temperature and pressure.
+
+Receiver configuration is available from the main receive screen:
+- `Modulation` now includes the Toyota `PMV-C2x` preset
+- `Min RSSI` can be used to ignore weak frames
+- `Radio` can force `Internal` or `External` hardware instead of relying on `Auto`
 
 ![input](tpms.gif)
 

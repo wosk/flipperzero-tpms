@@ -3,14 +3,18 @@
 #include <lib/toolbox/stream/stream.h>
 #include <lib/subghz/receiver.h>
 #include "protocols/tpms_generic.h"
+#include "protocols/toyota_pmvc2x.h"
 
 #include <furi.h>
+#include <string.h>
 
 #define TPMS_HISTORY_MAX 50
 #define TAG "TPMSHistory"
 
 typedef struct {
     FuriString* item_str;
+    FuriString* type_label;
+    FuriString* id_label;
     FlipperFormat* flipper_string;
     uint8_t type;
     uint32_t id;
@@ -33,6 +37,44 @@ struct TPMSHistory {
     TPMSHistoryStruct* history;
 };
 
+static void tpms_history_build_labels(TPMSHistory* instance, TPMSHistoryItem* item) {
+    furi_assert(instance);
+    furi_assert(item);
+
+    furi_string_reset(instance->tmp_string);
+    if(flipper_format_rewind(item->flipper_string) &&
+       flipper_format_read_string(item->flipper_string, "Protocol", instance->tmp_string)) {
+        if(strcmp(furi_string_get_cstr(instance->tmp_string), TPMS_PROTOCOL_TOYOTA_PMVC2X_NAME) == 0) {
+            furi_string_set_str(item->type_label, "Toyota-C2x");
+        } else {
+            furi_string_set(item->type_label, instance->tmp_string);
+        }
+    } else {
+        furi_string_set_str(item->type_label, "TPMS");
+    }
+
+    furi_string_printf(item->id_label, "%08lX", (unsigned long)item->id);
+    furi_string_printf(
+        item->item_str,
+        "%s %s",
+        furi_string_get_cstr(item->type_label),
+        furi_string_get_cstr(item->id_label));
+}
+
+static void tpms_history_move_item_to_front(TPMSHistory* instance, size_t index) {
+    furi_assert(instance);
+    if(index == 0 || index >= TPMSHistoryItemArray_size(instance->history->data)) {
+        return;
+    }
+
+    TPMSHistoryItem item = *TPMSHistoryItemArray_get(instance->history->data, index);
+    for(size_t i = index; i > 0; i--) {
+        *TPMSHistoryItemArray_get(instance->history->data, i) =
+            *TPMSHistoryItemArray_get(instance->history->data, i - 1);
+    }
+    *TPMSHistoryItemArray_get(instance->history->data, 0) = item;
+}
+
 TPMSHistory* tpms_history_alloc(void) {
     TPMSHistory* instance = malloc(sizeof(TPMSHistory));
     instance->tmp_string = furi_string_alloc();
@@ -47,6 +89,8 @@ void tpms_history_free(TPMSHistory* instance) {
     for
         M_EACH(item, instance->history->data, TPMSHistoryItemArray_t) {
             furi_string_free(item->item_str);
+            furi_string_free(item->type_label);
+            furi_string_free(item->id_label);
             furi_string_free(item->preset->name);
             free(item->preset);
             flipper_format_free(item->flipper_string);
@@ -81,6 +125,8 @@ void tpms_history_reset(TPMSHistory* instance) {
     for
         M_EACH(item, instance->history->data, TPMSHistoryItemArray_t) {
             furi_string_free(item->item_str);
+            furi_string_free(item->type_label);
+            furi_string_free(item->id_label);
             furi_string_free(item->preset->name);
             free(item->preset);
             flipper_format_free(item->flipper_string);
@@ -138,6 +184,18 @@ void tpms_history_get_text_item_menu(TPMSHistory* instance, FuriString* output, 
     furi_string_set(output, item->item_str);
 }
 
+const char* tpms_history_get_type_label(TPMSHistory* instance, uint16_t idx) {
+    furi_assert(instance);
+    TPMSHistoryItem* item = TPMSHistoryItemArray_get(instance->history->data, idx);
+    return furi_string_get_cstr(item->type_label);
+}
+
+const char* tpms_history_get_id_label(TPMSHistory* instance, uint16_t idx) {
+    furi_assert(instance);
+    TPMSHistoryItem* item = TPMSHistoryItemArray_get(instance->history->data, idx);
+    return furi_string_get_cstr(item->id_label);
+}
+
 TPMSHistoryStateAddKey
     tpms_history_add_to_history(TPMSHistory* instance, void* context, SubGhzRadioPreset* preset) {
     furi_assert(instance);
@@ -181,6 +239,12 @@ TPMSHistoryStateAddKey
             Stream* flipper_string_stream = flipper_format_get_raw_stream(item->flipper_string);
             stream_clean(flipper_string_stream);
             subghz_protocol_decoder_base_serialize(decoder_base, item->flipper_string, preset);
+            item->preset->frequency = preset->frequency;
+            furi_string_set(item->preset->name, preset->name);
+            item->preset->data = preset->data;
+            item->preset->data_size = preset->data_size;
+            tpms_history_build_labels(instance, item);
+            tpms_history_move_item_to_front(instance, i);
             return TPMSHistoryStateAddKeyUpdateData;
         }
     }
@@ -198,33 +262,13 @@ TPMSHistoryStateAddKey
         item->id = id;
 
         item->item_str = furi_string_alloc();
+        item->type_label = furi_string_alloc();
+        item->id_label = furi_string_alloc();
         item->flipper_string = flipper_format_string_alloc();
         subghz_protocol_decoder_base_serialize(decoder_base, item->flipper_string, preset);
-
-        do {
-            if(!flipper_format_rewind(item->flipper_string)) {
-                FURI_LOG_E(TAG, "Rewind error");
-                break;
-            }
-            if(!flipper_format_read_string(
-                   item->flipper_string, "Protocol", instance->tmp_string)) {
-                FURI_LOG_E(TAG, "Missing Protocol");
-                break;
-            }
-
-            if(!flipper_format_rewind(item->flipper_string)) {
-                FURI_LOG_E(TAG, "Rewind error");
-                break;
-            }
-            uint32_t id = 0;
-            if(!flipper_format_read_uint32(item->flipper_string, "Id", &id, 1)) {
-                FURI_LOG_E(TAG, "Missing Id");
-                break;
-            }
-            furi_string_cat_printf(instance->tmp_string, " %lX", id);
-
-            furi_string_set(item->item_str, instance->tmp_string);
-        } while(false);
+        tpms_history_build_labels(instance, item);
+        tpms_history_move_item_to_front(
+            instance, TPMSHistoryItemArray_size(instance->history->data) - 1);
         instance->last_index_write++;
         return TPMSHistoryStateAddKeyNewDada;
     }

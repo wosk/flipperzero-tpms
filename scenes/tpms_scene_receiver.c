@@ -31,6 +31,19 @@ static const NotificationSequence subghz_sequence_rx_locked = {
     NULL,
 };
 
+static void tpms_scene_receiver_reload_history(TPMSApp* app) {
+    furi_assert(app);
+
+    tpms_view_receiver_exit(app->tpms_receiver);
+    for(uint8_t i = 0; i < tpms_history_get_item(app->txrx->history); i++) {
+        tpms_view_receiver_add_item_to_menu(
+            app->tpms_receiver,
+            tpms_history_get_type_label(app->txrx->history, i),
+            tpms_history_get_id_label(app->txrx->history, i),
+            tpms_history_get_type_protocol(app->txrx->history, i));
+    }
+}
+
 static void tpms_scene_receiver_update_statusbar(void* context) {
     TPMSApp* app = context;
     FuriString* history_stat_str;
@@ -76,21 +89,18 @@ static void tpms_scene_receiver_add_to_history_callback(
     void* context) {
     furi_assert(context);
     TPMSApp* app = context;
-    FuriString* str_buff;
-    str_buff = furi_string_alloc();
+    float rssi = subghz_devices_get_rssi(app->txrx->radio_device);
+    if((app->txrx->rssi_filter_dbm != TPMS_RSSI_FILTER_OFF) &&
+       (rssi < (float)app->txrx->rssi_filter_dbm)) {
+        subghz_receiver_reset(receiver);
+        return;
+    }
 
-    if(tpms_history_add_to_history(app->txrx->history, decoder_base, app->txrx->preset) ==
-       TPMSHistoryStateAddKeyNewDada) {
-        furi_string_reset(str_buff);
-
-        tpms_history_get_text_item_menu(
-            app->txrx->history, str_buff, tpms_history_get_item(app->txrx->history) - 1);
-        tpms_view_receiver_add_item_to_menu(
-            app->tpms_receiver,
-            furi_string_get_cstr(str_buff),
-            tpms_history_get_type_protocol(
-                app->txrx->history, tpms_history_get_item(app->txrx->history) - 1));
-
+    TPMSHistoryStateAddKey history_state =
+        tpms_history_add_to_history(app->txrx->history, decoder_base, app->txrx->preset);
+    if((history_state == TPMSHistoryStateAddKeyNewDada) ||
+       (history_state == TPMSHistoryStateAddKeyUpdateData)) {
+        tpms_scene_receiver_reload_history(app);
         tpms_scene_receiver_update_statusbar(app);
         notification_message(app->notifications, &sequence_blink_green_10);
         if(app->lock != TPMSLockOn) {
@@ -100,19 +110,13 @@ static void tpms_scene_receiver_add_to_history_callback(
         }
     }
     subghz_receiver_reset(receiver);
-    furi_string_free(str_buff);
     app->txrx->rx_key_state = TPMSRxKeyStateAddKey;
 }
 
 void tpms_scene_receiver_on_enter(void* context) {
     TPMSApp* app = context;
 
-    FuriString* str_buff;
-    str_buff = furi_string_alloc();
-
     if(app->txrx->rx_key_state == TPMSRxKeyStateIDLE) {
-        tpms_preset_init(
-            app, "AM650", subghz_setting_get_default_frequency(app->setting), NULL, 0);
         tpms_history_reset(app->txrx->history);
         app->txrx->rx_key_state = TPMSRxKeyStateStart;
     }
@@ -120,35 +124,17 @@ void tpms_scene_receiver_on_enter(void* context) {
     tpms_view_receiver_set_lock(app->tpms_receiver, app->lock);
 
     //Load history to receiver
-    tpms_view_receiver_exit(app->tpms_receiver);
-    for(uint8_t i = 0; i < tpms_history_get_item(app->txrx->history); i++) {
-        furi_string_reset(str_buff);
-        tpms_history_get_text_item_menu(app->txrx->history, str_buff, i);
-        tpms_view_receiver_add_item_to_menu(
-            app->tpms_receiver,
-            furi_string_get_cstr(str_buff),
-            tpms_history_get_type_protocol(app->txrx->history, i));
+    tpms_scene_receiver_reload_history(app);
+    if(tpms_history_get_item(app->txrx->history)) {
         app->txrx->rx_key_state = TPMSRxKeyStateAddKey;
     }
-    furi_string_free(str_buff);
     tpms_scene_receiver_update_statusbar(app);
 
     tpms_view_receiver_set_callback(app->tpms_receiver, tpms_scene_receiver_callback, app);
     subghz_receiver_set_rx_callback(
         app->txrx->receiver, tpms_scene_receiver_add_to_history_callback, app);
 
-    if(app->txrx->txrx_state == TPMSTxRxStateRx) {
-        tpms_rx_end(app);
-    };
-    if((app->txrx->txrx_state == TPMSTxRxStateIDLE) ||
-       (app->txrx->txrx_state == TPMSTxRxStateSleep)) {
-        tpms_begin(
-            app,
-            subghz_setting_get_preset_data_by_name(
-                app->setting, furi_string_get_cstr(app->txrx->preset->name)));
-
-        tpms_rx(app, app->txrx->preset->frequency);
-    }
+    tpms_receiver_restart(app);
 
     tpms_view_receiver_set_idx_menu(app->tpms_receiver, app->txrx->idx_menu_chosen);
     view_dispatcher_switch_to_view(app->view_dispatcher, TPMSViewReceiver);
@@ -170,8 +156,6 @@ bool tpms_scene_receiver_on_event(void* context, SceneManagerEvent event) {
             subghz_receiver_set_rx_callback(app->txrx->receiver, NULL, app);
 
             app->txrx->rx_key_state = TPMSRxKeyStateIDLE;
-            tpms_preset_init(
-                app, "AM650", subghz_setting_get_default_frequency(app->setting), NULL, 0);
             if(scene_manager_has_previous_scene(app->scene_manager, TPMSSceneStart)) {
                 consumed = scene_manager_search_and_switch_to_previous_scene(
                     app->scene_manager, TPMSSceneStart);
@@ -206,7 +190,7 @@ bool tpms_scene_receiver_on_event(void* context, SceneManagerEvent event) {
             tpms_scene_receiver_update_statusbar(app);
         }
         // Get current RSSI
-        float rssi = furi_hal_subghz_get_rssi();
+        float rssi = subghz_devices_get_rssi(app->txrx->radio_device);
         tpms_view_receiver_set_rssi(app->tpms_receiver, rssi);
 
         if(app->txrx->txrx_state == TPMSTxRxStateRx) {
@@ -217,5 +201,11 @@ bool tpms_scene_receiver_on_event(void* context, SceneManagerEvent event) {
 }
 
 void tpms_scene_receiver_on_exit(void* context) {
-    UNUSED(context);
+    TPMSApp* app = context;
+    subghz_receiver_set_rx_callback(app->txrx->receiver, NULL, app);
+
+    if(app->txrx->txrx_state == TPMSTxRxStateRx) {
+        tpms_rx_end(app);
+        tpms_sleep(app);
+    }
 }
